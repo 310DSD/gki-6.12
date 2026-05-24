@@ -4,36 +4,53 @@ on:
   workflow_dispatch: # 支持在 GitHub 网页端手动一键触发运行
 
 jobs:
-  fetch_and_pack:
+  sync_and_push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # 确保 Action 有权限写入你的仓库
+      
     steps:
       - name: 空间清理与最大化
         run: |
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
+          df -h
           
-      - name: 精准提取 AOSP 源码快照并打包
+      - name: 签出当前仓库
+        uses: actions/checkout@v4
+
+      - name: 完整提取 AOSP 官方 Tag 并直接推送
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
           
+          # 1. 初始化干净的源码目录
           mkdir aosp_source && cd aosp_source
           git init
+          
+          # 2. 关联 Google AOSP 官方源
           git remote add origin https://android.googlesource.com/kernel/common
           
-          echo "正在从 Google 官方服务器精准拉取 r32 快照..."
-          git fetch --depth 1 origin refs/tags/android16-6.12-2026-03_r32:refs/tags/android16-6.12-2026-03_r32
+          # 3. 【核心修复】不使用 --depth 1，完整拉取该 Tag 及其必备的上下文历史对象
+          echo "正在从 Google 官方源完整拉取 android16-6.12-2026-03_r32 及其历史链..."
+          git fetch origin refs/tags/android16-6.12-2026-03_r32:refs/tags/android16-6.12-2026-03_r32
+          
+          # 4. 基于完整的 Tag 创建本地 master 分支
           git checkout refs/tags/android16-6.12-2026-03_r32 -b local_master
           
-          echo "正在将大体积源码树打包为二进制本地 Bundle 文件，避免 HTTPS 网络传输碎片超时的限制..."
-          git bundle create ../aosp_r32.bundle local_master
+          # 5. 关联你的个人 GitHub 目标仓库
+          git remote add github_repo "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
           
-      - name: 暂存大文件至 GitHub 内部中转站
-        uses: actions/upload-artifact@v4
-        with:
-          name: aosp-bundle
-          path: aosp_r32.bundle
+          # 6. 【核心修复】配置大文件传输的核心参数，防止推送大单次提交时被 GitHub 吞掉
+          echo "配置 Git 传输缓冲区与压缩率..."
+          git config --local http.postBuffer 1048576000
+          git config --local http.maxRequestSize 1048576000
+          git config --local core.compression 9
+          
+          # 7. 执行最终的强制推送，将其写入你的仓库分支
+          echo "正在将完整的 r32 分支推送到你的个人 GitHub 仓库..."
+          git push -f github_repo local_master:android16-6.12-2026-03-r32
           retention-days: 1
 
   push_to_repo:
