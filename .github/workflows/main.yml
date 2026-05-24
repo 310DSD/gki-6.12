@@ -1,10 +1,10 @@
 name: AOSP 特定 Tag 同步工具
 
 on:
-  workflow_dispatch: # 支持在 GitHub 网页端手动一键触发运行
+  workflow_dispatch:
 
 jobs:
-  sync_and_push: # 【全脚本唯一 Job】
+  sync_snapshot:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -17,37 +17,35 @@ jobs:
           sudo rm -rf /opt/ghc
           df -h
           
-      - name: 签出当前仓库
+      - name: 签出当前个人仓库（获取合法的 Git 凭证上下文）
         uses: actions/checkout@v4
 
-      - name: 完整提取 AOSP 官方 Tag 并直接推送
+      - name: 提取纯源码快照并作为单次提交强推
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
           
-          # 1. 初始化干净的源码目录
-          mkdir aosp_source && cd aosp_source
+          # 1. 建立一个源码目录
+          mkdir aosp_workspace && cd aosp_workspace
+          git init
+          git remote add google_origin https://android.googlesource.com/kernel/common
+          
+          echo ">>> 正在从 Google 官方浅克隆 r32 纯源码切片 (无历史，通常仅需十几秒) ..."
+          git fetch --depth 1 google_origin refs/tags/android16-6.12-2026-03_r32:refs/tags/android16-6.12-2026-03_r32
+          git checkout refs/tags/android16-6.12-2026-03_r32
+          
+          echo ">>> 原地斩断 AOSP Git 历史，确保 100% 完整保留所有隐藏文件与目录结构 ..."
+          rm -rf .git
+          
+          echo ">>> 重新初始化为个人初代干净仓库 ..."
           git init
           
-          # 2. 关联 Google AOSP 官方源
-          git remote add origin https://android.googlesource.com/kernel/common
+          echo ">>> 正在本地提交全套纯源码文件 ..."
+          git add -A
+          git commit -m "Chore: Sync AOSP android16-6.12-2026-03_r32 pure source snapshot"
           
-          # 3. 完整拉取该 Tag 及其必备的上下文历史对象
-          echo "正在从 Google 官方源完整拉取 android16-6.12-2026-03_r32 及其历史链..."
-          git fetch origin refs/tags/android16-6.12-2026-03_r32:refs/tags/android16-6.12-2026-03_r32
+          # 2. 关联你自己的目标仓库并强推
+          git remote add target_my_repo "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
           
-          # 4. 基于完整的 Tag 创建本地 master 分支
-          git checkout refs/tags/android16-6.12-2026-03_r32 -b local_master
-          
-          # 5. 关联你的个人 GitHub 目标仓库
-          git remote add github_repo "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-          
-          # 6. 配置大文件传输的核心参数，防止推送大单次提交时被 GitHub 吞掉
-          echo "配置 Git 传输缓冲区与压缩率..."
-          git config --local http.postBuffer 1048576000
-          git config --local http.maxRequestSize 1048576000
-          git config --local core.compression 9
-          
-          # 7. 执行最终的强制推送，将其写入你的仓库分支
-          echo "正在将完整的 r32 分支推送到你的个人 GitHub 仓库..."
-          git push -f github_repo local_master:android16-6.12-2026-03-r32
+          echo ">>> 正在将完美保留的 r32 纯源码分支推送到你的个人仓库..."
+          git push -f target_my_repo HEAD:android16-6.12-2026-03-r32
