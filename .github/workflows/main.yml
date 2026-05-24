@@ -4,10 +4,10 @@ on:
   workflow_dispatch: # 支持在 GitHub 网页端手动一键触发运行
 
 jobs:
-  sync_and_push: # 当前只有这唯一一个 Job，没有任何 needs 依赖关系！
+  sync_and_push: # 【全脚本唯一 Job】
     runs-on: ubuntu-latest
     permissions:
-      contents: write # 确保 Action 有权限写入你的仓库
+      contents: write
       
     steps:
       - name: 空间清理与最大化
@@ -50,55 +50,4 @@ jobs:
           
           # 7. 执行最终的强制推送，将其写入你的仓库分支
           echo "正在将完整的 r32 分支推送到你的个人 GitHub 仓库..."
-          git push -f github_repo local_master:android16-6.12-2026-03-r32
-          git fetch origin refs/tags/android16-6.12-2026-03_r32:refs/tags/android16-6.12-2026-03_r32
-          
-          # 4. 基于完整的 Tag 创建本地 master 分支
-          git checkout refs/tags/android16-6.12-2026-03_r32 -b local_master
-          
-          # 5. 关联你的个人 GitHub 目标仓库
-          git remote add github_repo "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-          
-          # 6. 【核心修复】配置大文件传输的核心参数，防止推送大单次提交时被 GitHub 吞掉
-          echo "配置 Git 传输缓冲区与压缩率..."
-          git config --local http.postBuffer 1048576000
-          git config --local http.maxRequestSize 1048576000
-          git config --local core.compression 9
-          
-          # 7. 执行最终的强制推送，将其写入你的仓库分支
-          echo "正在将完整的 r32 分支推送到你的个人 GitHub 仓库..."
-          git push -f github_repo local_master:android16-6.12-2026-03-r32
-          retention-days: 1
-
-  push_to_repo:
-    needs: fetch_and_pack
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: 签出当前仓库
-        uses: actions/checkout@v4
-
-      - name: 下载中转的二进制 Bundle 文件
-        uses: actions/download-artifact@v4
-        with:
-          name: aosp-bundle
-
-      - name: 解包并强制推送至当前 GitHub 仓库
-        run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          
-          echo "正在从本地二进制压缩流中恢复 Git 树..."
-          git clone --depth=1 aosp_r32.bundle -b local_master recovered_source
-          
-          cd recovered_source
-          git remote add github_repo "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-          
-          echo "正在设置大文件传输缓冲区参数，确保强推不被中断..."
-          git config --global http.postBuffer 1048576000
-          git config --global ssh.postBuffer 1048576000
-          git config --global core.compression 9
-          
-          echo "执行最终强推..."
           git push -f github_repo local_master:android16-6.12-2026-03-r32
