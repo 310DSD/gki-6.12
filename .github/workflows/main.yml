@@ -1,13 +1,13 @@
 name: AOSP 特定 Tag 同步工具
 
 on:
-  workflow_dispatch: # 支持网页端手动一键触发
+  workflow_dispatch: # 支持在 GitHub 网页端手动一键触发运行
 
 jobs:
   sync_tag_to_branch:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # 确保 Action 有权限写入你的仓库
+      contents: write # 确保 Action 有权限将提取的代码写入你当前的个人仓库
       
     steps:
       - name: 签出当前仓库
@@ -18,19 +18,20 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
           
-          # 1. 创建一个干净的临时目录并初始化
+          # 1. 创建并进入干净的临时目录
           mkdir aosp_source && cd aosp_source
           git init
           
-          # 2. 关联 Google AOSP 官方源
+          # 2. 关联 Google AOSP 官方内核公共源码源
           git remote add origin https://android.googlesource.com/kernel/common
           
-          # 3. 极其精准地只拉取 r31 或 r32 标签（以 r31 为例，深度为 1，速度极快）
-          # 如果你想用 r32，只需把下面的 android16-6.12-2026-03 r31 换成 android16-6.12-2026-03 r32（中间的空格换成斜杠或保持原样，取决于Git转义，官方写法是带空格的标签名，克隆时直接写标签全称即可）
-          git fetch --depth 1 origin refs/tags/android16-6.12-2026-03/r31:refs/tags/android16-6.12-2026-03/r31
+          # 3. 精准拉取 r32 标签（深度为 1，不拉取历史提交，速度极快）
+          # 对应网页上的 "android16-6.12-2026-03 r32"，底层的标准引用名称为 android16-6.12-2026-03_r32
+          echo "正在从 Google AOSP 官方源精准拉取 android16-6.12-2026-03_r32..."
+          git fetch --depth 1 origin refs/tags/android16-6.12-2026-03_r32:refs/tags/android16-6.12-2026-03_r32
           
-          # 4. 基于这个 Tag 创建一个本地的临时 master 分支
-          git checkout refs/tags/android16-6.12-2026-03/r31 -b local_master
+          # 4. 基于这个拉取下来的 Tag 快照，在本地切出一个名叫 local_master 的临时分支
+          git checkout refs/tags/android16-6.12-2026-03_r32 -b local_master
 
       - name: 强行推送到当前仓库的目标分支
         run: |
@@ -38,5 +39,6 @@ jobs:
           # 关联到你当前运行这个 Action 的个人 GitHub 仓库
           git remote add github_repo "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
           
-          # 将这个快照点作为你个人仓库的一个全新分支（自定义命名为 android16-6.12-2026-03-r31）强推上去
-          git push -f github_repo local_master:android16-6.12-2026-03-r31
+          # 5. 将 local_master 分支强行推送到你个人仓库中，并在你的个人仓库里自动创建一个新分支：android16-6.12-2026-03-r32
+          echo "正在将源码快照同步推送到你的个人 GitHub 仓库中..."
+          git push -f github_repo local_master:android16-6.12-2026-03-r32
